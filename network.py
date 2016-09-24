@@ -6,6 +6,13 @@ from caffe import layers as L
 from caffe import params as P
 
 
+# const int input_dim = this->input_shape(i + 1);
+# const int kernel_extent = dilation_data[i] * (kernel_shape_data[i] - 1) + 1;
+# const int output_dim = (input_dim + 2 * pad_data[i] - kernel_extent)
+#     / stride_data[i] + 1;
+# for equal dim convolution, please padding!!!
+
+
 __author__ = 'Fisher Yu'
 __copyright__ = 'Copyright (c) 2016, Fisher Yu'
 __email__ = 'i@yf.io'
@@ -70,6 +77,7 @@ def make_upsample(bottom, num_classes):
             group=num_classes, pad=4, weight_filler=dict(type="bilinear")))
 
 
+# frontend used to classification, remove the top.
 def build_frontend_vgg(net, bottom, num_classes):
     prev_layer = bottom
     num_convolutions = [2, 2, 3, 3, 3]
@@ -95,8 +103,8 @@ def build_frontend_vgg(net, bottom, num_classes):
                                    dict(lr_mult=2, decay_mult=0)],
                             convolution_param=dict(num_output=num_outputs,
                                                    kernel_size=3,
-                                                   dilation=dilations[l])))
-            setattr(net, relu_name,
+                                                   dilation=dilations[l])))  # replace those pooling layer into dilations.
+            setattr(net, relu_name
                     L.ReLU(getattr(net, conv_name), in_place=True))
             prev_layer = getattr(net, relu_name)
         if dilations[l+1] == 0:
@@ -118,11 +126,13 @@ def build_frontend_vgg(net, bottom, num_classes):
         convolution_param=dict(num_output=4096, kernel_size=1))
     net.relu7 = L.ReLU(net.fc7, in_place=True)
     net.drop7 = L.Dropout(net.relu7, in_place=True, dropout_ratio=0.5)
+
+    # use convolution as fully connected layer!
     net.final = L.Convolution(
         net.drop7,
         param=[dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)],
         convolution_param=dict(
-            num_output=num_classes, kernel_size=1,
+            num_output=num_classes, kernel_size=1,  # num_classes => 21
             weight_filler=dict(type='gaussian', std=0.001),
             bias_filler=dict(type='constant', value=0)))
     return net.final, 'final'
@@ -141,7 +151,7 @@ def build_context(net, bottom, num_classes, layers=8):
                            dict(lr_mult=2, decay_mult=0)],
                     convolution_param=dict(
                         num_output=num_classes * multiplier, kernel_size=3,
-                        pad=1,
+                        pad=1, ## padding十分重要。
                         weight_filler=dict(type='identity',
                                            num_groups=num_classes, std=0.01),
                         bias_filler=dict(type='constant', value=0))))
